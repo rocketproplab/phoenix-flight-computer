@@ -4,7 +4,7 @@
 
 
 //Ethernet Lib
-#include "w5500.h"
+#include "./lib/w5500/w5500.h"
 // #include <SD.h>
 // File myFile;
 
