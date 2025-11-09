@@ -1,64 +1,51 @@
-//LIBRARIES*****************************************************
-//SPI Libs
+// ─────────────────────────────────────────────────────────────────────────────
+// Libraries
+// ─────────────────────────────────────────────────────────────────────────────
+
+// SPI Libs
 #include <SPI.h>
-
-
-//Ethernet Lib
-#include "./lib/w5500/w5500.h"
+// Ethernet Lib
+#include "./src/w5500/w5500.h"
+// SD Card Lib
 // #include <SD.h>
 // File myFile;
+// Load Cell Lib
+// #include "HX711.h"
+// Thermocouple Libs
+// #include <Wire.h>
+// #include <DallasTemperature.h>
+// I2C Libs for Thermocouples
+// #include <Adafruit_I2CDevice.h>
+// #include <Adafruit_I2CRegister.h>
+// #include "Adafruit_MCP9600.h"
+// #include <OneWire.h>
 
-//Load Cell Lib
-#include "HX711.h"
-//Thermocouple Libs
-#include <Wire.h>
-#include <DallasTemperature.h>
+// ─────────────────────────────────────────────────────────────────────────────
+// Pin Definitions
+// ─────────────────────────────────────────────────────────────────────────────
 
-
-#include <Adafruit_I2CDevice.h>
-#include <Adafruit_I2CRegister.h>
-#include "Adafruit_MCP9600.h"
-#include <OneWire.h>
-
-//Pin Definitions **********************************************
-//Ethernet CS
+//Ethernet Chip Select
 #define EthernetCS 10
 #define SDCS 40
 
 //Load Cell Pins
-#define DOUT1  30
-#define CLK1  28
-#define DOUT2  34
-#define CLK2  32
-#define DOUT3  38
-#define CLK3  36
+// #define DOUT1  30
+// #define CLK1  28
+// #define DOUT2  34
+// #define CLK2  32
+// #define DOUT3  38
+// #define CLK3  36
 //ThermoCouple OneWire
-#define ONE_WIRE_BUS 22
-#define I2C_ADDRESS (0x67)
+// #define ONE_WIRE_BUS 22
+// #define I2C_ADDRESS (0x67)
 
+#include "src/valve/valve.h"
+#include "src/pt/pt.h"
 // ─────────────────────────────────────────────────────────────────────────────
-//                    Ethernet (MAC‑RAW) & Rocket Setup
+// Ethernet (MAC‑RAW)
 // ─────────────────────────────────────────────────────────────────────────────
-// timing for solenoids
-const unsigned long OPEN_MILLIS = 500;
 
-// bit‑masks for each valve in the 7‑bit rocket state
-const uint8_t GN2_LNG_FLOW_MASK = 0b1000000; // new “arm_lng”
-const uint8_t GN2_LOX_FLOW_MASK = 0b0100000; // new “arm_lox”
-const uint8_t GN2_VENT_MASK = 0b0010000;
-const uint8_t LNG_FLOW_MASK = 0b0001000;
-const uint8_t LNG_VENT_MASK = 0b0000100;
-const uint8_t LOX_FLOW_MASK = 0b0000010;
-const uint8_t LOX_VENT_MASK = 0b0000001;
-
-// PWM pins for solenoids
-const uint8_t GN2_LNG_FLOW_PIN = 8; // confirmed 
-const uint8_t GN2_LOX_FLOW_PIN = 9; // confirmed
-const uint8_t GN2_VENT_PIN = 4;
-const uint8_t LNG_FLOW_PIN = 7; // confirmed 
-const uint8_t LNG_VENT_PIN = 3;
-const uint8_t LOX_FLOW_PIN = 10; // confirmed 
-const uint8_t LOX_VENT_PIN = 6;
+uint8_t buffer[500];
 
 // first byte 0x02 = locally‑administered, unicast
 const uint8_t MAC_GROUND_STATION[6] = {0x02, 0x47, 0x53,
@@ -70,29 +57,7 @@ const uint8_t MAC_FLOW_VALVE[6] = {0x02, 0x46, 0x4C,
 const uint8_t MAC_SENSOR_GIGA[6] = {0x02, 0x53, 0x49,
                                     0x00, 0x00, 0x04}; // SI:  sensor interface
 
-// a single struct covers all valves
-struct Valve {
-  const char *name;
-  uint8_t mask;
-  uint8_t pin;
-  bool state;
-  unsigned long lastOpened;
-};
-
-// list all 7 valves here, whether or not they ar used
-Valve valves[] = {
-    {"GN2_LNG_FLOW", GN2_LNG_FLOW_MASK, GN2_LNG_FLOW_PIN, false, 0},
-    {"GN2_LOX_FLOW", GN2_LOX_FLOW_MASK, GN2_LOX_FLOW_PIN, false, 0},
-    {"GN2_VENT", GN2_VENT_MASK, GN2_VENT_PIN, false, 0},
-    {"LNG_FLOW", LNG_FLOW_MASK, LNG_FLOW_PIN, false, 0},
-    {"LNG_VENT", LNG_VENT_MASK, LNG_VENT_PIN, false, 0},
-    {"LOX_FLOW", LOX_FLOW_MASK, LOX_FLOW_PIN, false, 0},
-    {"LOX_VENT", LOX_VENT_MASK, LOX_VENT_PIN, false, 0}};
-const size_t NUM_VALVES = sizeof(valves) / sizeof(valves[0]);
-
-uint8_t buffer[500];
-uint8_t rocketState = 0b0000000; // default null
-
+// 
 struct TelemetryFrame {
   // –––– Ethernet header (14 B) ––––
   uint8_t dstMac[6];
@@ -104,48 +69,36 @@ struct TelemetryFrame {
 };
 TelemetryFrame f;
 
-//object creation **********************************************
+// ─────────────────────────────────────────────────────────────────────────────
+// Instance Declaration
+// ─────────────────────────────────────────────────────────────────────────────
 //Ethernet
 Wiznet5500 w5500;
 unsigned long lastSend = 0;
 //Load Cells
-HX711 loadCell1;
-HX711 loadCell2;
-HX711 loadCell3;
+// HX711 loadCell1;
+// HX711 loadCell2;
+// HX711 loadCell3;
 //Thermocouples
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature thermoCouples(&oneWire);
-DeviceAddress addr;
+// OneWire oneWire(ONE_WIRE_BUS);
+// DallasTemperature thermoCouples(&oneWire);
+// DeviceAddress addr;
 //Adafruit_MCP9600 mcp;
 
 //Other Consts ***************************************************
-float calibration_factor1 = -7050; //-7050 worked for my 440lb max scale setup
-float calibration_factor2 = -7050; //-7050 worked for my 440lb max scale setup
-float calibration_factor3 = -7050; //-7050 worked for my 440lb max scale setup
+// float calibration_factor1 = -7050; //-7050 worked for my 440lb max scale setup
+// float calibration_factor2 = -7050; //-7050 worked for my 440lb max scale setup
+// float calibration_factor3 = -7050; //-7050 worked for my 440lb max scale setup
 
-Ambient_Resolution ambientRes = RES_ZERO_POINT_0625;
+// Ambient_Resolution ambientRes = RES_ZERO_POINT_0625;
 
 void setup() {
   Serial.begin(115200);
 
-  // if (!SD.begin(SDCS)) {
-  //   Serial.println("initialization failed!");
-  //   //while (1);
-  // }else{
-  // Serial.println("SD Initlaized");
-  // }
-
-  //PT INPUTS
-  pinMode(A0,INPUT);
-  pinMode(A1,INPUT);
-  pinMode(A2,INPUT);
-  pinMode(A3,INPUT);
-  pinMode(A4,INPUT);
-
-  
-  //ethernet setup
+  // Ethernet setup
   w5500.begin(MAC_SENSOR_GIGA);
   Serial.println("Ethernet Setup Complete");
+
   //load cell setup
   // loadCell1.begin(DOUT1, CLK1);
   // loadCell1.set_scale();
@@ -175,71 +128,22 @@ void setup() {
   //mcp.setAmbientResolution(ambientRes);
   */
 
+  setupValves();
+  setupPTs();
   Serial.println("Done Initialized");
 }
 
-void receiveRocketState() {
+void receiveValveState() {
   uint16_t len;
   while ((len = w5500.readFrame(buffer, sizeof(buffer))) > 0){
     if (buffer[12] != 0x63 || buffer[13] != 0xe4)
       return;
-    uint8_t newState = buffer[14];
-    if (newState != rocketState) {
-      rocketState = newState;
-      Serial.println("----------");
-      Serial.print("Received Rocket State: ");
-      Serial.println(rocketState, BIN);
-    }
-  }
-}
-
-void updateValveStates() {
-  // for each valve, compare mask bit → open/close transition
-  for (size_t i = 0; i < NUM_VALVES; i++) {
-    bool shouldBeOpen = rocketState & valves[i].mask;
-    if (shouldBeOpen && !valves[i].state) {
-      Serial.print(valves[i].name);
-      Serial.println(": OPENING");
-      valves[i].state = true;
-      valves[i].lastOpened = millis();
-    } else if (!shouldBeOpen && valves[i].state) {
-      Serial.print(valves[i].name);
-      Serial.println(": CLOSING");
-      valves[i].state = false;
-    }
-  }
-}
-
-void applyValveVoltages() {
-  // full PWM for OPEN_MILLIS, then trickle
-  for (size_t i = 0; i < NUM_VALVES; i++) {
-    if (valves[i].state) {
-      unsigned long elapsed = millis() - valves[i].lastOpened;
-      uint8_t pwm = (elapsed > OPEN_MILLIS) ? 77 : 255;
-      analogWrite(valves[i].pin, pwm);
-      // Serial.print("Writing ");
-      // Serial.print(pwm);
-      // Serial.print(" to ");
-      // Serial.println(valves[i].pin);
-    } else {
-      analogWrite(valves[i].pin, 0);
-    }
+    uint8_t new_state = buffer[14];
+    valveSetState(new_state);
   }
 }
 
 void sendSensorData() {
-  double PT1_a = analogRead(A0) / 1023.0 * 5.0;
-  double PT1 = ((PT1_a - 0.5) / (4.5 - 0.5)) * 5000;
-  double PT2_a = analogRead(A1) / 1023.0 * 5.0;
-  double PT2 = ((PT2_a - 1) / (5.0 - 1.0)) * 1000;
-  double PT3_a = analogRead(A2) / 1023.0 * 5.0;
-  double PT3 = ((PT3_a - 1) / (5.0 - 1.0)) * 1000;
-  double PT4_a = analogRead(A3) / 1023.0 * 5.0;
-  double PT4 = ((PT4_a - 1) / (5.0 - 1.0)) * 1000;
-  double PT5_a = analogRead(A4) / 1023.0 * 5.0;
-  double PT5 = ((PT5_a - 1) / (5.0 - 1.0)) * 1000;
-  
-
   // LOAD CELL CALIBRATION
   // loadCell1.set_scale(calibration_factor1); // Adjust to this calibration factor
   // loadCell2.set_scale(calibration_factor2); // Adjust to this calibration factor
@@ -270,17 +174,19 @@ void sendSensorData() {
   // dataOut=String(loadOutput1)+","+String(loadOutput2)+","+String(loadOutput3)+","+String(thermoCouple1)+","+String(thermoCouple2);
 
   
-  String dataOut = String(PT1) + "," + String(PT2) + "," + String(PT3) + "," +
-                   String(PT4) + "," + String(PT5) + "," + String(loadOutput1) +
-                   "," + String(loadOutput2) + "," + String(loadOutput3) + "," +
-                   String(thermoCouple1) + "," + String(thermoCouple2);
+  String dataOut;
+
+  // construct PT data
+  for (uint8_t ptID = 0; ptID < countPTs(); ++ptID) {
+    double val = readPT(ptID);
+    if (ptID > 0) dataOut += ",";
+    dataOut += String(val);
+  } 
+  
+  dataOut = dataOut + String(loadOutput1) + "," + String(loadOutput2) + "," + String(loadOutput3) + ","
+    + String(thermoCouple1) + "," + String(thermoCouple2);
                    
-  // String dataOut = String(PT1_a) + ","
-  //                + String(PT2_a) + ","
-  //                + String(PT3_a) + ","
-  //                + String(PT4_a) + ","
-  //                + String(PT5_a) + ",";
-  //Serial.println(dataOut);
+  Serial.println(dataOut);
 
   // Send data
 
@@ -318,12 +224,10 @@ void sendSensorData() {
 }
 
 void loop() {
-  receiveRocketState();
-  // Serial.println("Received");
-  updateValveStates();
-  // Serial.println("Updated");
-  applyValveVoltages();
-  // Serial.println("Applied");
+  receiveValveState();
+  valveUpdateStates();
+  valveApplyVoltages();
+
   if (millis() - lastSend >= 200) {
     lastSend = millis();
     sendSensorData();
