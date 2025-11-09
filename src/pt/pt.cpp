@@ -30,7 +30,10 @@ uint8_t countPTs() {
 
 const PT* getPTInfo(uint8_t id) {
   // DANGER!!! really should never trigger this...
-  if (!valid(id)) return nullptr;
+  if (!valid(id)) {
+    Serial.println("ERROR: referencing unexisting PT, returning 0 as default.")
+    return &pts[0];
+  }
   return &pts[id];
 }
 
