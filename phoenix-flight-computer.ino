@@ -183,7 +183,7 @@ void sendSensorData() {
     dataOut += String(val);
   } 
   
-  dataOut = dataOut + ","String(loadOutput1) + "," + String(loadOutput2) + "," + String(loadOutput3) + ","
+  dataOut = dataOut + "," + String(loadOutput1) + "," + String(loadOutput2) + "," + String(loadOutput3) + ","
     + String(thermoCouple1) + "," + String(thermoCouple2);
                    
   Serial.println(dataOut);
