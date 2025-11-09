@@ -3,12 +3,12 @@
 static PT pts[] = {
   // name, pin, range, voltageMin, voltageMax, analogRange, voltageRange
   { "GN2", A0, 5000.0, 0.5, 4.5, 1023.0, 5.0 },
-  { "PT2", A1, 1000.0, 1.0, 5.0, 1023.0, 5.0 },
-  { "PT3", A2, 1000.0, 1.0, 5.0, 1023.0, 5.0 },
-  { "PT4", A3, 1000.0, 1.0, 5.0, 1023.0, 5.0 },
-  { "PT5", A4, 1000.0, 1.0, 5.0, 1023.0, 5.0 },
-  { "PT6", A6, 1500.0, 0.5, 4.5, 1023.0, 5.0 },
-  { "PT7", A7, 1500.0, 0.5, 4.5, 1023.0, 5.0 },
+  { "LOX-UPSTREAM", A1, 1000.0, 1.0, 5.0, 1023.0, 5.0 },
+  { "LNG-UPSTREAM", A2, 1000.0, 1.0, 5.0, 1023.0, 5.0 },
+  { "LOX-DOWNSTREAM", A3, 1000.0, 1.0, 5.0, 1023.0, 5.0 },
+  { "LNG-DOWNSTREAM", A4, 1000.0, 1.0, 5.0, 1023.0, 5.0 },
+  { "LOX-DOME", A7, 1500.0, 0.5, 4.5, 1023.0, 5.0 },
+  { "LNG-DOME", A6, 1500.0, 0.5, 4.5, 1023.0, 5.0 },
 };
 
 static const size_t NUM_PTS = sizeof(pts) / sizeof(pts[0]);
@@ -31,7 +31,7 @@ uint8_t countPTs() {
 const PT* getPTInfo(uint8_t id) {
   // DANGER!!! really should never trigger this...
   if (!valid(id)) {
-    Serial.println("ERROR: referencing unexisting PT, returning 0 as default.")
+    Serial.println("ERROR: referencing unexisting PT, returning 0 as default.");
     return &pts[0];
   }
   return &pts[id];
