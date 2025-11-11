@@ -6,6 +6,8 @@
 #include <SPI.h>
 // Ethernet Lib
 #include "./src/w5500/w5500.h"
+// Constants
+#include "./src/constants.h"
 // SD Card Lib
 // #include <SD.h>
 // File myFile;
@@ -228,7 +230,7 @@ void loop() {
   valveUpdateStates();
   valveApplyVoltages();
 
-  if (millis() - lastSend >= 200) {
+  if (millis() - lastSend >= TELEMETRY_DELAY) {
     lastSend = millis();
     sendSensorData();
   }
