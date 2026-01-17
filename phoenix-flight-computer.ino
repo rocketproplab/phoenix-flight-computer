@@ -139,8 +139,9 @@ void receiveValveState() {
   uint16_t len;
   while ((len = w5500.readFrame(buffer, sizeof(buffer))) > 0){
     if (buffer[12] != 0x63 || buffer[13] != 0xe4)
-      return;
+      continue;
     uint8_t new_state = buffer[14];
+    // Serial.println(new_state);
     valveSetState(new_state);
   }
 }

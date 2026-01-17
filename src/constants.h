@@ -15,6 +15,6 @@ static const uint8_t LOX_FLOW_PIN = 9;
 static const unsigned long OPEN_MILLIS = 500; // full power duration (ms)
 
 // Timing values
-static const int TELEMETRY_DELAY = 100;
+static const int TELEMETRY_DELAY = 200;
 
 #endif
