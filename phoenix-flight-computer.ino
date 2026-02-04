@@ -31,15 +31,37 @@
 #define SDCS 40
 
 //Load Cell Pins
-// #define DOUT1  30
-// #define CLK1  28
-// #define DOUT2  34
-// #define CLK2  32
-// #define DOUT3  38
-// #define CLK3  36
-//ThermoCouple OneWire
-// #define ONE_WIRE_BUS 22
-// #define I2C_ADDRESS (0x67)
+#define DOUT_STAR 16
+#define CLK_STAR  17
+#define DOUT_CIRCLE 14
+#define CLK_CIRCLE  15
+#define DOUT_TRIANGLE 18
+#define CLK_TRIANGLE  19
+
+//ThermoCouple
+#include <Wire.h>
+#include <Adafruit_I2CDevice.h>
+#include <Adafruit_I2CRegister.h>
+#include "Adafruit_MCP9600.h"
+
+#define I2C_ADDRESS1 (0x67) //no shorts, not grounded
+#define I2C_ADDRESS2 (0x66) //Top short only
+#define I2C_ADDRESS3 (0x65) //Bottom short only
+#define I2C_ADDRESS4 (0x64) //Both Shorted
+#define I2C_ADDRESS5 (0x60) //GND Adress
+
+Adafruit_MCP9600 mcp1;
+Adafruit_MCP9600 mcp2;
+Adafruit_MCP9600 mcp3;
+Adafruit_MCP9600 mcp4;
+Adafruit_MCP9600 mcp5;
+
+/* Set and print ambient resolution */
+Ambient_Resolution ambientRes1 = RES_ZERO_POINT_0625;
+Ambient_Resolution ambientRes2 = RES_ZERO_POINT_0625;
+Ambient_Resolution ambientRes3 = RES_ZERO_POINT_0625;
+Ambient_Resolution ambientRes4 = RES_ZERO_POINT_0625;
+Ambient_Resolution ambientRes5 = RES_ZERO_POINT_0625;
 
 #include "src/valve/valve.h"
 #include "src/pt/pt.h"
@@ -78,9 +100,10 @@ TelemetryFrame f;
 Wiznet5500 w5500;
 unsigned long lastSend = 0;
 //Load Cells
-// HX711 loadCell1;
-// HX711 loadCell2;
-// HX711 loadCell3;
+#include "HX711.h"
+HX711 loadCell_star;
+HX711 loadCell_circle;
+HX711 loadCell_triangle;
 //Thermocouples
 // OneWire oneWire(ONE_WIRE_BUS);
 // DallasTemperature thermoCouples(&oneWire);
@@ -88,9 +111,9 @@ unsigned long lastSend = 0;
 //Adafruit_MCP9600 mcp;
 
 //Other Consts ***************************************************
-// float calibration_factor1 = -7050; //-7050 worked for my 440lb max scale setup
-// float calibration_factor2 = -7050; //-7050 worked for my 440lb max scale setup
-// float calibration_factor3 = -7050; //-7050 worked for my 440lb max scale setup
+float calibration_factor_star = -5600; //-7050 worked for my 440lb max scale setup
+float calibration_factor_circle = -5900; //-7050 worked for my 440lb max scale setup
+float calibration_factor_triangle = -6000; //-7050 worked for my 440lb max scale setup
 
 // Ambient_Resolution ambientRes = RES_ZERO_POINT_0625;
 
@@ -102,33 +125,75 @@ void setup() {
   Serial.println("Ethernet Setup Complete");
 
   //load cell setup
-  // loadCell1.begin(DOUT1, CLK1);
-  // loadCell1.set_scale();
-  // loadCell1.tare(); //Reset the scale to 0
-  // Serial.println("Load 1 Done");
+  loadCell_star.begin(DOUT_STAR, CLK_STAR);
+  loadCell_star.set_scale();
+  loadCell_star.tare(); //Reset the scale to 0
+  Serial.println("Load Star Done");
   
-  // loadCell2.begin(DOUT2, CLK2);
-  // loadCell2.set_scale();
-  // loadCell2.tare(); //Reset the scale to 0
-  // Serial.println("Load 2 Done");
+  loadCell_circle.begin(DOUT_CIRCLE, CLK_CIRCLE);
+  loadCell_circle.set_scale();
+  loadCell_circle.tare(); //Reset the scale to 0
+  Serial.println("Load Circle Done");
 
-  // loadCell3.begin(DOUT3, CLK3);
-  // loadCell3.set_scale();
-  // loadCell3.tare(); //Reset the scale to 0
-  // Serial.println("Load 3 Done");
+  loadCell_triangle.begin(DOUT_TRIANGLE, CLK_TRIANGLE);
+  loadCell_triangle.set_scale();
+  loadCell_triangle.tare(); //Reset the scale to 0
+  Serial.println("Load Triangle Done");
 
-  //thermocouple setup
-  
-  // thermoCouples.begin();
-/*
-  if (! mcp.begin(I2C_ADDRESS)) {
-    Serial.println("Sensor not found. Check wiring!");
-    while (1);
+    Serial.println("MCP9600 HW test");
+
+   /* Initialise the driver with I2C_ADDRESS and the default I2C bus. */
+  if (! mcp1.begin(I2C_ADDRESS1)) {
+    Serial.println("Sensor 1 not found. Check wiring!");
   }
   
+  if (! mcp2.begin(I2C_ADDRESS2)) {
+    Serial.println("Sensor 2 not found. Check wiring!");
+  }
+  
+  if (! mcp3.begin(I2C_ADDRESS3)) {
+    Serial.println("Sensor 3 not found. Check wiring!");
+  }
+  
+  if (! mcp4.begin(I2C_ADDRESS4)) {
+    Serial.println("Sensor 4 not found. Check wiring!");
+  }
 
-  //mcp.setAmbientResolution(ambientRes);
-  */
+  if (! mcp5.begin(I2C_ADDRESS5)) {
+    Serial.println("Sensor 5 not found. Check wiring!");
+  }
+
+  /* Set and print ambient resolution */
+  mcp1.setAmbientResolution(ambientRes1);
+  mcp2.setAmbientResolution(ambientRes2);
+  mcp3.setAmbientResolution(ambientRes3);
+  mcp4.setAmbientResolution(ambientRes4);
+  mcp5.setAmbientResolution(ambientRes5);
+
+  mcp1.setADCresolution(MCP9600_ADCRESOLUTION_18);
+  mcp2.setADCresolution(MCP9600_ADCRESOLUTION_18);
+  mcp3.setADCresolution(MCP9600_ADCRESOLUTION_18);
+  mcp4.setADCresolution(MCP9600_ADCRESOLUTION_18);
+  mcp5.setADCresolution(MCP9600_ADCRESOLUTION_18);
+
+  mcp1.setThermocoupleType(MCP9600_TYPE_K); //K
+  mcp2.setThermocoupleType(MCP9600_TYPE_T);
+  mcp3.setThermocoupleType(MCP9600_TYPE_T);
+  mcp4.setThermocoupleType(MCP9600_TYPE_K); //K
+  mcp5.setThermocoupleType(MCP9600_TYPE_K); //K
+  
+
+  mcp1.setFilterCoefficient(3);
+  mcp2.setFilterCoefficient(3);
+  mcp3.setFilterCoefficient(3);
+  mcp4.setFilterCoefficient(3);
+  mcp5.setFilterCoefficient(3);
+
+  mcp1.enable(true);
+  mcp2.enable(true);
+  mcp3.enable(true);
+  mcp4.enable(true);
+  mcp5.enable(true);
 
   setupValves();
   setupPTs();
@@ -148,25 +213,28 @@ void receiveValveState() {
 
 void sendSensorData() {
   // LOAD CELL CALIBRATION
-  // loadCell1.set_scale(calibration_factor1); // Adjust to this calibration factor
-  // loadCell2.set_scale(calibration_factor2); // Adjust to this calibration factor
-  // loadCell3.set_scale(calibration_factor3); // Adjust to this calibration factor
+  // loadCell_star.set_scale(calibration_factor1); // Adjust to this calibration factor
+  // loadCell_circle.set_scale(calibration_factor2); // Adjust to this calibration factor
+  // loadCell_triangle.set_scale(calibration_factor3); // Adjust to this calibration factor
 
   // LOAD CELL DATA
-  // double loadOutput1 = loadCell1.get_units();
-  // double loadOutput2 = loadCell2.get_units();
-  // double loadOutput3 = loadCell3.get_units();
-  double loadOutput1 = 0;
-  double loadOutput2 = 0;
-  double loadOutput3 = 0;
+  double loadOutput1 = loadCell_star.get_units();
+  double loadOutput2 = loadCell_circle.get_units();
+  double loadOutput3 = loadCell_triangle.get_units();
+  // double loadOutput1 = 0;
+  // double loadOutput2 = 0;
+  // double loadOutput3 = 0;
 
   // THERMOCOUPLE DATA
 
   // thermoCouples.requestTemperatures();
   // double thermoCouple1 = thermoCouples.getTempCByIndex(0);
   // double thermoCouple2 = thermoCouples.getTempCByIndex(1);
-  double thermoCouple1 = 0;
-  double thermoCouple2 = 0;
+  double thermoCouple1 = mcp1.readThermocouple();
+  double thermoCouple2 = mcp2.readThermocouple();
+  double thermoCouple3 = mcp3.readThermocouple();
+  double thermoCouple4 = mcp4.readThermocouple();
+  double thermoCouple5 = mcp5.readThermocouple();
   // double thermoCouple3=thermoCouples.getTempCByIndex(2);
 
   // LIVE ETHERNET TRANSMISSION
@@ -186,8 +254,15 @@ void sendSensorData() {
     dataOut += String(val);
   } 
   
-  dataOut = dataOut + "," + String(loadOutput1) + "," + String(loadOutput2) + "," + String(loadOutput3) + ","
-    + String(thermoCouple1) + "," + String(thermoCouple2);
+  dataOut = dataOut + "," 
+    + String(loadOutput1) + "," 
+    + String(loadOutput2) + "," 
+    + String(loadOutput3) + ","
+    + String(thermoCouple1) + "," 
+    + String(thermoCouple2) + ","
+    + String(thermoCouple3) + ","
+    + String(thermoCouple4) + ","
+    + String(thermoCouple5);
                    
   Serial.println(dataOut);
 
