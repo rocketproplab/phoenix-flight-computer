@@ -126,17 +126,17 @@ void setup() {
 
   //load cell setup
   loadCell_star.begin(DOUT_STAR, CLK_STAR);
-  loadCell_star.set_scale();
+  loadCell_star.set_scale(calibration_factor_star);
   loadCell_star.tare(); //Reset the scale to 0
   Serial.println("Load Star Done");
   
   loadCell_circle.begin(DOUT_CIRCLE, CLK_CIRCLE);
-  loadCell_circle.set_scale();
+  loadCell_circle.set_scale(calibration_factor_circle);
   loadCell_circle.tare(); //Reset the scale to 0
   Serial.println("Load Circle Done");
 
   loadCell_triangle.begin(DOUT_TRIANGLE, CLK_TRIANGLE);
-  loadCell_triangle.set_scale();
+  loadCell_triangle.set_scale(calibration_factor_triangle);
   loadCell_triangle.tare(); //Reset the scale to 0
   Serial.println("Load Triangle Done");
 
