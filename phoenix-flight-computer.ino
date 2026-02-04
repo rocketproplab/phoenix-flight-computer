@@ -141,7 +141,7 @@ void receiveValveState() {
     if (buffer[12] != 0x63 || buffer[13] != 0xe4)
       continue;
     uint8_t new_state = buffer[14];
-    // Serial.println(new_state);
+    Serial.println(new_state);
     valveSetState(new_state);
   }
 }
@@ -182,6 +182,8 @@ void sendSensorData() {
   // construct PT data
   for (uint8_t ptID = 0; ptID < countPTs(); ++ptID) {
     double val = readPT(ptID);
+    // experiment - adjust pt directly based on input to measure latency
+    val = (g_valveState >> ptID & 1) ? 1000 : 0;
     if (ptID > 0) dataOut += ",";
     dataOut += String(val);
   } 
