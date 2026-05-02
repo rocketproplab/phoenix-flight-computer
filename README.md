@@ -28,6 +28,7 @@ On boot:
 * Initialize W5500 Ethernet Chip in MACRAW mode with according MAC address.
 * Initialize all valves.
 * Initialize all pressure transducers
+
 On loop:
 * Read Ethernet frames and update valve target state.
 * Apply valve target state to valves.
