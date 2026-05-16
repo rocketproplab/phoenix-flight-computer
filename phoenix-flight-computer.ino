@@ -43,6 +43,7 @@
 
 #include "src/valve/valve.h"
 #include "src/pt/pt.h"
+#include "src/vent/vent.h"
 // ─────────────────────────────────────────────────────────────────────────────
 // Ethernet (MAC‑RAW)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,6 +132,7 @@ void setup() {
   */
 
   setupValves();
+  setupVents();
   setupPTs();
   Serial.println("Done Initialized");
 }
@@ -143,6 +145,17 @@ void receiveValveState() {
     uint8_t new_state = buffer[14];
     // Serial.println(new_state);
     valveSetState(new_state);
+  }
+}
+
+void receiveVentState() {
+  uint16_t len;
+  while ((len = w5500.readFrame(buffer, sizeof(buffer))) > 0){
+    if (buffer[12] != 0x63 || buffer[13] != 0xe4)
+      continue;
+    uint8_t new_state = buffer[14];
+    // Serial.println(new_state);
+    ventSetState(new_state);
   }
 }
 
@@ -230,6 +243,18 @@ void loop() {
   receiveValveState();
   valveUpdateStates();
   valveApplyVoltages();
+
+  receiveVentState();
+  ventUpdateStates();
+  ventApplyVoltages();
+
+  // Print valve data
+  Serial.print("Valves State (Binary): ");
+  Serial.println(valveGetState(), BIN);
+
+  // Print vent data
+  Serial.print("Vents State (Binary): ");
+  Serial.println(ventGetState(), BIN);
 
   if (millis() - lastSend >= TELEMETRY_DELAY) {
     lastSend = millis();

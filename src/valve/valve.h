@@ -26,4 +26,6 @@ void valveUpdateStates();
 // Update and set valve voltages
 void valveApplyVoltages();
 
+//Return the count of valves
+int countValves();
 #endif

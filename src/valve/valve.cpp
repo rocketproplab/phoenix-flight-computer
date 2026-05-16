@@ -58,3 +58,7 @@ void valveApplyVoltages() {
         }
     }
 }
+
+int countValves() {
+    return NUM_VALVES;
+}
