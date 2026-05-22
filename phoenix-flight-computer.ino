@@ -8,19 +8,20 @@
 #include "./src/w5500/w5500.h"
 // Constants
 #include "./src/constants.h"
+#include "./src/role_config.h"
 // SD Card Lib
 // #include <SD.h>
 // File myFile;
-// Load Cell Lib
-// #include "HX711.h"
-// Thermocouple Libs
-// #include <Wire.h>
-// #include <DallasTemperature.h>
-// I2C Libs for Thermocouples
-// #include <Adafruit_I2CDevice.h>
-// #include <Adafruit_I2CRegister.h>
-// #include "Adafruit_MCP9600.h"
-// #include <OneWire.h>
+
+// Sensors and actuators
+#if PHOENIX_ROLE_HAS_VALVES
+#include "src/valve/valve.h"
+#endif
+#if PHOENIX_ROLE_HAS_SENSOR_TELEMETRY
+#include "src/pt/pt.h"
+#include "src/lc/lc.h"
+#include "src/tc/tc.h"
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pin Definitions
@@ -30,57 +31,16 @@
 #define EthernetCS 10
 #define SDCS 40
 
-//Load Cell Pins
-#define DOUT_STAR 16
-#define CLK_STAR  17
-#define DOUT_CIRCLE 14
-#define CLK_CIRCLE  15
-#define DOUT_TRIANGLE 18
-#define CLK_TRIANGLE  19
-
-//ThermoCouple
-#include <Wire.h>
-#include <Adafruit_I2CDevice.h>
-#include <Adafruit_I2CRegister.h>
-#include "Adafruit_MCP9600.h"
-
-#define I2C_ADDRESS1 (0x67) //no shorts, not grounded
-#define I2C_ADDRESS2 (0x66) //Top short only
-#define I2C_ADDRESS3 (0x65) //Bottom short only
-#define I2C_ADDRESS4 (0x64) //Both Shorted
-#define I2C_ADDRESS5 (0x60) //GND Adress
-
-Adafruit_MCP9600 mcp1;
-Adafruit_MCP9600 mcp2;
-Adafruit_MCP9600 mcp3;
-Adafruit_MCP9600 mcp4;
-Adafruit_MCP9600 mcp5;
-
-/* Set and print ambient resolution */
-Ambient_Resolution ambientRes1 = RES_ZERO_POINT_0625;
-Ambient_Resolution ambientRes2 = RES_ZERO_POINT_0625;
-Ambient_Resolution ambientRes3 = RES_ZERO_POINT_0625;
-Ambient_Resolution ambientRes4 = RES_ZERO_POINT_0625;
-Ambient_Resolution ambientRes5 = RES_ZERO_POINT_0625;
-
-#include "src/valve/valve.h"
-#include "src/pt/pt.h"
 // ─────────────────────────────────────────────────────────────────────────────
 // Ethernet (MAC‑RAW)
 // ─────────────────────────────────────────────────────────────────────────────
 
-uint8_t buffer[500];
+#if PHOENIX_ROLE_HAS_VALVES
+uint8_t buffer[64];
+uint8_t valveState = 0;
+#endif
 
-// first byte 0x02 = locally‑administered, unicast
-const uint8_t MAC_GROUND_STATION[6] = {0x02, 0x47, 0x53,
-                                       0x00, 0x00, 0x01}; // GS:  ground station
-const uint8_t MAC_RELIEF_VALVE[6] = {0x02, 0x52, 0x56,
-                                     0x00, 0x00, 0x02}; // RV:  relief valve
-const uint8_t MAC_FLOW_VALVE[6] = {0x02, 0x46, 0x4C,
-                                   0x00, 0x00, 0x03}; // FL:  flow valve
-const uint8_t MAC_SENSOR_GIGA[6] = {0x02, 0x53, 0x49,
-                                    0x00, 0x00, 0x04}; // SI:  sensor interface
-
+#if PHOENIX_ROLE_HAS_SENSOR_TELEMETRY
 // 
 struct TelemetryFrame {
   // –––– Ethernet header (14 B) ––––
@@ -92,195 +52,178 @@ struct TelemetryFrame {
   uint8_t payload[200]; // 200 bytes usually enough.. optimize later
 };
 TelemetryFrame f;
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Instance Declaration
+// Struct Declaration
 // ─────────────────────────────────────────────────────────────────────────────
+
 //Ethernet
 Wiznet5500 w5500;
+
+//Valves
+#if PHOENIX_ROLE_HAS_VALVES
+Valve valves[] = {
+#if defined(PHOENIX_ROLE_FLOW_VALVES)
+  {"LNG_PRES", LNG_PRES_MASK, LNG_PRES_PIN, false, 0},
+  {"LOX_PRES", LOX_PRES_MASK, LOX_PRES_PIN, false, 0},
+  {"LNG_FLOW", LNG_FLOW_MASK, LNG_FLOW_PIN, false, 0},
+  {"LOX_FLOW", LOX_FLOW_MASK, LOX_FLOW_PIN, false, 0}
+#elif defined(PHOENIX_ROLE_RELIEF_VALVES)
+  {"LNG_VENT", LNG_VENT_MASK, LNG_VENT_PIN, false, 0},
+  {"LOX_VENT", LOX_VENT_MASK, LOX_VENT_PIN, false, 0}
+#endif
+};
+
+static const size_t NUM_VALVES = sizeof(valves) / sizeof(valves[0]);
+#endif
+
+#if PHOENIX_ROLE_HAS_SENSOR_TELEMETRY
 unsigned long lastSend = 0;
-//Load Cells
-#include "HX711.h"
-HX711 loadCell_star;
-HX711 loadCell_circle;
-HX711 loadCell_triangle;
-//Thermocouples
-// OneWire oneWire(ONE_WIRE_BUS);
-// DallasTemperature thermoCouples(&oneWire);
-// DeviceAddress addr;
-//Adafruit_MCP9600 mcp;
 
-//Other Consts ***************************************************
-float calibration_factor_star = -5600; //-7050 worked for my 440lb max scale setup
-float calibration_factor_circle = -5900; //-7050 worked for my 440lb max scale setup
-float calibration_factor_triangle = -6000; //-7050 worked for my 440lb max scale setup
+// pressure transducer declaration
+PT pts[] = {
+  // name,            pin,  range,   voltageMin, voltageMax, analogRange, voltageRange, initialized
+  { "GN2",            PT_GN2_PIN,            5000.0f, 0.5f,       4.5f,       1023.0f,     5.0f,         false },
+  { "LOX-UPSTREAM",   PT_LOX_UPSTREAM_PIN,   1000.0f, 1.0f,       5.0f,       1023.0f,     5.0f,         false },
+  { "LNG-UPSTREAM",   PT_LNG_UPSTREAM_PIN,   1000.0f, 1.0f,       5.0f,       1023.0f,     5.0f,         false },
+  { "LOX-DOWNSTREAM", PT_LOX_DOWNSTREAM_PIN, 1000.0f, 1.0f,       5.0f,       1023.0f,     5.0f,         false },
+  { "LNG-DOWNSTREAM", PT_LNG_DOWNSTREAM_PIN, 1500.0f, 0.5f,       4.5f,       1023.0f,     5.0f,         false },
+  { "LOX-DOME",       PT_LOX_DOME_PIN,       1500.0f, 0.5f,       4.5f,       1023.0f,     5.0f,         false },
+  { "LNG-DOME",       PT_LNG_DOME_PIN,       1500.0f, 0.5f,       4.5f,       1023.0f,     5.0f,         false },
+};
+static const size_t NUM_PTS = sizeof(pts) / sizeof(pts[0]);
 
-// Ambient_Resolution ambientRes = RES_ZERO_POINT_0625;
+// load cell declaration
+LC loadCells[] = {
+  {"STAR", LC_STAR_CALIBRATION_FACTOR, LC_STAR_DOUT_PIN, LC_STAR_CLK_PIN, false},
+  {"CIRCLE", LC_CIRCLE_CALIBRATION_FACTOR, LC_CIRCLE_DOUT_PIN, LC_CIRCLE_CLK_PIN, false},
+  {"TRIANGLE", LC_TRIANGLE_CALIBRATION_FACTOR, LC_TRIANGLE_DOUT_PIN, LC_TRIANGLE_CLK_PIN, false},
+};
+static const size_t NUM_LCS = sizeof(loadCells) / sizeof(loadCells[0]);
+
+// thermocouple declaration
+TC thermocouples[] = {
+  {'k', TC_I2C_ADDRESS_1, false},
+  {'t', TC_I2C_ADDRESS_2, false},
+  {'t', TC_I2C_ADDRESS_3, false},
+  {'k', TC_I2C_ADDRESS_4, false},
+  {'k', TC_I2C_ADDRESS_5, false},
+};
+static const size_t NUM_TCS = sizeof(thermocouples) / sizeof(thermocouples[0]);
+#endif
 
 void setup() {
   Serial.begin(115200);
 
   // Ethernet setup
+#if defined(PHOENIX_ROLE_SENSOR_TELEMETRY)
   w5500.begin(MAC_SENSOR_GIGA);
+#elif defined(PHOENIX_ROLE_FLOW_VALVES)
+  w5500.begin(MAC_FLOW_VALVE);
+#elif defined(PHOENIX_ROLE_RELIEF_VALVES)
+  w5500.begin(MAC_RELIEF_VALVE);
+#endif
   Serial.println("Ethernet Setup Complete");
 
+#if PHOENIX_ROLE_HAS_SENSOR_TELEMETRY
+  // pt setup
+  for (size_t i = 0; i < NUM_PTS; i++) {
+    initPT(&pts[i]);
+  }
+
   //load cell setup
-  loadCell_star.begin(DOUT_STAR, CLK_STAR);
-  loadCell_star.set_scale(calibration_factor_star);
-  loadCell_star.tare(); //Reset the scale to 0
-  Serial.println("Load Star Done");
-  
-  loadCell_circle.begin(DOUT_CIRCLE, CLK_CIRCLE);
-  loadCell_circle.set_scale(calibration_factor_circle);
-  loadCell_circle.tare(); //Reset the scale to 0
-  Serial.println("Load Circle Done");
-
-  loadCell_triangle.begin(DOUT_TRIANGLE, CLK_TRIANGLE);
-  loadCell_triangle.set_scale(calibration_factor_triangle);
-  loadCell_triangle.tare(); //Reset the scale to 0
-  Serial.println("Load Triangle Done");
-
-    Serial.println("MCP9600 HW test");
-
-   /* Initialise the driver with I2C_ADDRESS and the default I2C bus. */
-  if (! mcp1.begin(I2C_ADDRESS1)) {
-    Serial.println("Sensor 1 not found. Check wiring!");
-  }
-  
-  if (! mcp2.begin(I2C_ADDRESS2)) {
-    Serial.println("Sensor 2 not found. Check wiring!");
-  }
-  
-  if (! mcp3.begin(I2C_ADDRESS3)) {
-    Serial.println("Sensor 3 not found. Check wiring!");
-  }
-  
-  if (! mcp4.begin(I2C_ADDRESS4)) {
-    Serial.println("Sensor 4 not found. Check wiring!");
+  for (size_t i = 0; i < NUM_LCS; i++) {
+    Serial.print("Load ");
+    Serial.print(loadCells[i].name);
+    if (!initLC(&loadCells[i])) Serial.println(" failed");
+    else Serial.println(" Done");
   }
 
-  if (! mcp5.begin(I2C_ADDRESS5)) {
-    Serial.println("Sensor 5 not found. Check wiring!");
+  //thermocouple setup
+  Serial.println("MCP9600 HW test");
+  for (size_t i = 0; i < NUM_TCS; i++) {
+    if (!initTC(&thermocouples[i])) {
+      Serial.print("Sensor ");
+      Serial.print(i + 1);
+      Serial.println(" not found. Check wiring!");
+    }
   }
 
-  /* Set and print ambient resolution */
-  mcp1.setAmbientResolution(ambientRes1);
-  mcp2.setAmbientResolution(ambientRes2);
-  mcp3.setAmbientResolution(ambientRes3);
-  mcp4.setAmbientResolution(ambientRes4);
-  mcp5.setAmbientResolution(ambientRes5);
+#endif
 
-  mcp1.setADCresolution(MCP9600_ADCRESOLUTION_18);
-  mcp2.setADCresolution(MCP9600_ADCRESOLUTION_18);
-  mcp3.setADCresolution(MCP9600_ADCRESOLUTION_18);
-  mcp4.setADCresolution(MCP9600_ADCRESOLUTION_18);
-  mcp5.setADCresolution(MCP9600_ADCRESOLUTION_18);
-
-  mcp1.setThermocoupleType(MCP9600_TYPE_K); //K
-  mcp2.setThermocoupleType(MCP9600_TYPE_T);
-  mcp3.setThermocoupleType(MCP9600_TYPE_T);
-  mcp4.setThermocoupleType(MCP9600_TYPE_K); //K
-  mcp5.setThermocoupleType(MCP9600_TYPE_K); //K
-  
-
-  mcp1.setFilterCoefficient(3);
-  mcp2.setFilterCoefficient(3);
-  mcp3.setFilterCoefficient(3);
-  mcp4.setFilterCoefficient(3);
-  mcp5.setFilterCoefficient(3);
-
-  mcp1.enable(true);
-  mcp2.enable(true);
-  mcp3.enable(true);
-  mcp4.enable(true);
-  mcp5.enable(true);
-
-  setupValves();
-  setupPTs();
+#if PHOENIX_ROLE_HAS_VALVES
+  for (size_t i = 0; i < NUM_VALVES; i++) {
+    initValve(&valves[i]);
+  }
+#endif
   Serial.println("Done Initialized");
 }
 
+#if PHOENIX_ROLE_HAS_VALVES
 void receiveValveState() {
   uint16_t len;
   while ((len = w5500.readFrame(buffer, sizeof(buffer))) > 0){
+    if (len < 15)
+      continue;
     if (buffer[12] != 0x63 || buffer[13] != 0xe4)
       continue;
-    uint8_t new_state = buffer[14];
-    // Serial.println(new_state);
-    valveSetState(new_state);
+    valveState = buffer[14];
+    // Serial.println(valveState);
+    for (size_t i = 0; i < NUM_VALVES; i++) {
+      valveSetOpen(&valves[i], (valveState & valves[i].mask) != 0);
+    }
   }
 }
+#endif
 
+#if PHOENIX_ROLE_HAS_SENSOR_TELEMETRY
 void sendSensorData() {
-  // LOAD CELL CALIBRATION
-  // loadCell_star.set_scale(calibration_factor1); // Adjust to this calibration factor
-  // loadCell_circle.set_scale(calibration_factor2); // Adjust to this calibration factor
-  // loadCell_triangle.set_scale(calibration_factor3); // Adjust to this calibration factor
+  float pressureReadings[NUM_PTS] = {};
+  float loadReadings[NUM_LCS] = {};
+  float temperatureReadings[NUM_TCS] = {};
 
-  // LOAD CELL DATA
-  double loadOutput1 = loadCell_star.get_units();
-  double loadOutput2 = loadCell_circle.get_units();
-  double loadOutput3 = loadCell_triangle.get_units();
-  // double loadOutput1 = 0;
-  // double loadOutput2 = 0;
-  // double loadOutput3 = 0;
+  for (size_t i = 0; i < NUM_PTS; i++) {
+    readPT(&pts[i], &pressureReadings[i]);
+  }
 
-  // THERMOCOUPLE DATA
+  for (size_t i = 0; i < NUM_LCS; i++) {
+    readLC(&loadCells[i], &loadReadings[i]);
+  }
 
-  // thermoCouples.requestTemperatures();
-  // double thermoCouple1 = thermoCouples.getTempCByIndex(0);
-  // double thermoCouple2 = thermoCouples.getTempCByIndex(1);
-  double thermoCouple1 = mcp1.readThermocouple();
-  double thermoCouple2 = mcp2.readThermocouple();
-  double thermoCouple3 = mcp3.readThermocouple();
-  double thermoCouple4 = mcp4.readThermocouple();
-  double thermoCouple5 = mcp5.readThermocouple();
-  // double thermoCouple3=thermoCouples.getTempCByIndex(2);
+  for (size_t i = 0; i < NUM_TCS; i++) {
+    readTC(&thermocouples[i], &temperatureReadings[i]);
+  }
 
   // LIVE ETHERNET TRANSMISSION
   // Put all data into an output string to be sent over
-  // String
-  // dataOut=String(PT1)+","+String(PT2)+","+String(PT3)+","+String(PT4)+","+String(PT5);
-  // String
-  // dataOut=String(loadOutput1)+","+String(loadOutput2)+","+String(loadOutput3)+","+String(thermoCouple1)+","+String(thermoCouple2);
-
-  
   String dataOut;
 
-  // construct PT data
-  for (uint8_t ptID = 0; ptID < countPTs(); ++ptID) {
-    double val = readPT(ptID);
-    if (ptID > 0) dataOut += ",";
-    dataOut += String(val);
-  } 
-  
-  dataOut = dataOut + "," 
-    + String(loadOutput1) + "," 
-    + String(loadOutput2) + "," 
-    + String(loadOutput3) + ","
-    + String(thermoCouple1) + "," 
-    + String(thermoCouple2) + ","
-    + String(thermoCouple3) + ","
-    + String(thermoCouple4) + ","
-    + String(thermoCouple5);
+  for (size_t i = 0; i < NUM_PTS; i++) {
+    if (dataOut.length() > 0) dataOut += ",";
+    dataOut += String(pressureReadings[i]);
+  }
+
+  for (size_t i = 0; i < NUM_LCS; i++) {
+    if (dataOut.length() > 0) dataOut += ",";
+    dataOut += String(loadReadings[i]);
+  }
+
+  for (size_t i = 0; i < NUM_TCS; i++) {
+    if (dataOut.length() > 0) dataOut += ",";
+    dataOut += String(temperatureReadings[i]);
+  }
                    
   Serial.println(dataOut);
 
   // Send data
 
-  char *data = dataOut.c_str();
+  const char *data = dataOut.c_str();
   int len = strlen(data);
   memset(&f, 0, sizeof(f)); // set to 0
-  memcpy(f.dstMac, MAC_GROUND_STATION, 6);
-  // ((byte *)&f)[0] = 0xFF;
-  // ((byte *)&f)[1] = 0xFF;
-  // ((byte *)&f)[2] = 0xFF;
-  // ((byte *)&f)[3] = 0xFF;
-  // ((byte *)&f)[4] = 0xFF;
-  // ((byte *)&f)[5] = 0xFF;
-  memcpy(f.srcMac, MAC_SENSOR_GIGA, 6);
-  ((byte *)&f)[12] = 0x88;
-  ((byte *)&f)[13] = 0x89;
+  memcpy(f.dstMac, MAC_GROUND_STATION, 6); //dst
+  memcpy(f.srcMac, MAC_SENSOR_GIGA, 6); //src
+  ((byte *)&f)[12] = 0x88; ((byte *)&f)[13] = 0x89; // sensor frame
   // Serial.print("Data len: ");
   // Serial.println(len);
   memcpy(f.payload, data, len);
@@ -300,14 +243,20 @@ void sendSensorData() {
   //   Serial.println("error opening file");
   // }
 }
+#endif
 
 void loop() {
+#if PHOENIX_ROLE_HAS_VALVES
   receiveValveState();
-  valveUpdateStates();
-  valveApplyVoltages();
+  for (size_t i = 0; i < NUM_VALVES; i++) {
+    valveApplyState(&valves[i]);
+  }
+#endif
 
+#if PHOENIX_ROLE_HAS_SENSOR_TELEMETRY
   if (millis() - lastSend >= TELEMETRY_DELAY) {
     lastSend = millis();
     sendSensorData();
   }
+#endif
 }

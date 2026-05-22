@@ -11,19 +11,14 @@ struct Valve {
   unsigned long lastOpened; 
 };
 
-// Initialize valve state
-void setupValves();
+bool initValve(Valve* valve);
 
-// Set flight computer stored valve state
-void valveSetState(uint8_t newState);
+void valveOpen(Valve* valve);
 
-// Get flight computer stored valve state
-uint8_t valveGetState();
+void valveClose(Valve* valve);
 
-// Update valve timing according to stored valve state
-void valveUpdateStates();
+void valveSetOpen(Valve* valve, bool open);
 
-// Update and set valve voltages
-void valveApplyVoltages();
+void valveApplyState(Valve* valve);
 
 #endif
