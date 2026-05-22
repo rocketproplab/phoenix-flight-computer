@@ -57,9 +57,8 @@ static const uint8_t PT_LNG_DOWNSTREAM_PIN = A3;
 static const uint8_t PT_LOX_DOME_PIN = A2;
 static const uint8_t PT_LNG_DOME_PIN = A1;
 
+// Timing constants
 static const unsigned long OPEN_MILLIS = 500; // full power duration (ms)
-
-// Timing values
-static const int TELEMETRY_DELAY = 200;
+static const unsigned long TELEMETRY_DELAY = 200; // (ms) 1/TELEMETRY_DELAY Hz updates
 
 #endif

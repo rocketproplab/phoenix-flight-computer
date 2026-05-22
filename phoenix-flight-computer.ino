@@ -133,22 +133,27 @@ void setup() {
   }
 
   //load cell setup
-  for (size_t i = 0; i < NUM_LCS; i++) {
-    Serial.print("Load ");
-    Serial.print(loadCells[i].name);
-    if (!initLC(&loadCells[i])) Serial.println(" failed");
-    else Serial.println(" Done");
-  }
+
+  // for (size_t i = 0; i < NUM_LCS; i++) {
+  //   Serial.print("Load ");
+  //   Serial.print(loadCells[i].name);
+  //   if (!initLC(&loadCells[i])) Serial.println(" failed");
+  //   else Serial.println(" Done");
+  // }
 
   //thermocouple setup
-  Serial.println("MCP9600 HW test");
-  for (size_t i = 0; i < NUM_TCS; i++) {
-    if (!initTC(&thermocouples[i])) {
-      Serial.print("Sensor ");
-      Serial.print(i + 1);
-      Serial.println(" not found. Check wiring!");
-    }
-  }
+
+  // Serial.println("MCP9600 HW test");
+  // for (size_t i = 0; i < NUM_TCS; i++) {
+  //   if (!initTC(&thermocouples[i])) {
+  //     Serial.print("Sensor ");
+  //     Serial.print(i + 1);
+  //     Serial.println(" not found. Check wiring!");
+  //   }
+  // }
+
+  // IMPORTANT, for cold flow testing, disable loadcell / thermocouple init.
+  // sensor reads will default to 0 if not initialized
 
 #endif
 
